@@ -158,6 +158,12 @@ auto-compaction) goes through Jev: the toast reads
 replaced the built-in summary, or `fallback to built-in summary (…)` when Jev
 could not remove enough (short sessions, or when it fails).
 
+To use a self-hosted decision model instead of TypeSafe, set the `baseUrl` option to
+its System One endpoint and `model` to the model it serves, for example
+`http://127.0.0.1:11434/v1/systemone` and `clef` for Ollama running Clef; `apiKey`
+still has to be a non-empty string. Ollama rejects requests over 64 KiB, so lower
+`maxStateTokens` and `maxRequestTokens` to about 11000 and 13000 there.
+
 To run from a checkout without installing: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`
 from the repository root. No publishing step is required; the marketplace is
 just the repo's `.claude-plugin/marketplace.json`.

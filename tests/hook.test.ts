@@ -40,9 +40,10 @@ function transcript(): SessionMessage[] {
   ];
 }
 
-function jevFetch(answer: (name: string) => number, bodies: string[] = []) {
-  return async (_url: string, init?: { body?: string }) => {
+function jevFetch(answer: (name: string) => number, bodies: string[] = [], urls: string[] = []) {
+  return async (url: string, init?: { body?: string }) => {
     bodies.push(init?.body ?? '');
+    urls.push(url);
     const { questions } = JSON.parse(init?.body ?? '{}') as { questions: Record<string, unknown> };
     const answers = Object.fromEntries(
       Object.keys(questions).map((key) => [key, { type: 'noul', noul: answer(key) }]),
@@ -65,6 +66,14 @@ describe('hook config', () => {
       compactAtPercent: 60,
       minReductionRatio: 0.25,
     });
+  });
+
+  it('reads baseUrl and leaves it unset otherwise', () => {
+    expect(resolveHookConfig({}).baseUrl).toBeUndefined();
+    expect(resolveHookConfig({ baseUrl: '' }).baseUrl).toBeUndefined();
+    expect(resolveHookConfig({ baseUrl: 'http://127.0.0.1:11434/v1/systemone' }).baseUrl).toBe(
+      'http://127.0.0.1:11434/v1/systemone',
+    );
   });
 });
 
@@ -125,6 +134,18 @@ describe('compactSession', () => {
     expect(summarize(output)).toMatch(/^\d+% reduction; 1 kept, 1 call_dropped; state ~\d+ tokens \(full\) in 1 request\(s\)$/);
     expect(decisionLog(output)).toBe('t1:Read:drop_call/call=0.10/result=0.10 t2:Bash:keep/call=0.90/result=0.90');
     expect(decisionLogLines(output)).toEqual([`decisions: ${decisionLog(output)}`]);
+  });
+
+  it('sends requests to baseUrl when configured and to System One otherwise', async () => {
+    const urls: string[] = [];
+    const base = { ...resolveHookConfig({ preserveRecentMessages: 1 }), apiKey: 'k' };
+    await compactSession(transcript(), base, jevFetch(() => 0.1, [], urls));
+    await compactSession(
+      transcript(),
+      { ...base, baseUrl: 'http://127.0.0.1:11434/v1/systemone' },
+      jevFetch(() => 0.1, [], urls),
+    );
+    expect(urls).toEqual(['https://api.typesafe.ai/v1/systemone', 'http://127.0.0.1:11434/v1/systemone']);
   });
 
   it('splits a long decision log into ui.log lines under the host limit', async () => {

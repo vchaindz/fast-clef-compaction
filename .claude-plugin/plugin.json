@@ -57,6 +57,11 @@
       "title": "Jev model",
       "description": "TypeSafe Jev model name.",
       "default": "jev-latest"
+    },
+    "baseUrl": {
+      "type": "string",
+      "title": "System One endpoint",
+      "description": "URL of the /v1/systemone endpoint. Leave unset for TypeSafe. Point it at a local server for a self-hosted decision model, e.g. http://127.0.0.1:11434/v1/systemone for Ollama running clef."
     }
   }
 }
