@@ -64,5 +64,9 @@
       "description": "URL of the /v1/systemone endpoint. Defaults to Ollama on this machine; set https://api.typesafe.ai/v1/systemone (plus apiKey) for TypeSafe.",
       "default": "http://127.0.0.1:11434/v1/systemone"
     }
+  },
+  "author": {
+    "name": "Dennis Zimmer",
+    "url": "https://github.com/vchaindz"
   }
 }
