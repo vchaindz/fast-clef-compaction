@@ -1,17 +1,23 @@
-# fast-jev-compaction
+# fast-clef-compaction
 
-Claude Code plugin that replaces the compaction summary with Jev decisions:
-every tool call and result is scored in one fast request, stale ones are
-dropped or truncated, everything kept stays verbatim. Also usable as an npm
-library.
+Claude Code plugin that replaces the compaction summary with decisions from a
+Clef model running on your own machine: every tool call and result is scored in
+one request to Ollama, stale ones are dropped or truncated, everything kept
+stays verbatim. Also usable as an npm library, and usable against any System
+One server (TypeSafe's hosted Jev included) by changing `baseUrl`.
+
+Derived from [fast-jev-compaction](https://github.com/tamaratran/fast-jev-compaction)
+by Tamara Tran (MIT). This version defaults to a local
+[Clef](https://huggingface.co/Cloudflare/clef) served by Ollama, needs no API
+key there, and sizes its requests for Ollama's 64 KiB request limit.
 
 ## What and why
 
 Most context compaction asks an LLM to summarize old turns. A summary is
 lossy: a file path, exact error, constraint, or command can disappear even when
 it matters later. This library never rewrites anything. It only deletes tool
-calls and tool results Jev says are no longer needed, and it asks Jev while
-showing it the whole conversation. User and assistant text stays verbatim and
+calls and tool results the decision model says are no longer needed, and it asks
+while showing the model the whole conversation. User and assistant text stays verbatim and
 in order.
 
 The repository is both an npm package (`src/`) and a Claude Code plugin
@@ -23,10 +29,10 @@ built-in compaction summary with the original messages.
 1. Every `tool_use` is paired with its `tool_result` by `tool_use_id`. Calls in
    the first message or in the newest `preserveRecentMessages` messages are
    pinned and never touched.
-2. The **state** sent to Jev is the whole conversation so far, oldest first,
+2. The **state** sent to the model is the whole conversation so far, oldest first,
    with every tool result replaced by a short note (`ok, 4213 chars (omitted)`).
    Tool inputs are included, texts are included, nothing is summarized.
-3. The state is fitted into `maxStateTokens` (25k by default) in stages, each
+3. The state is fitted into `maxStateTokens` (11k by default, sized for Ollama) in stages, each
    applied only if the previous one was not enough: tool inputs truncated to
    1000, then 200, then 60 characters; long texts abridged to head + tail,
    oldest non-pinned messages first; old non-pinned messages collapsed to a
@@ -35,14 +41,14 @@ built-in compaction summary with the original messages.
    out; runs of old call-only messages folded into one entry. If it still
    does not fit, compaction throws. Tokens are estimated without a tokenizer (a
    word per six letters, half a token per digit, ~one per other symbol),
-   calibrated to land a little above the counts Jev reports.
-4. For every non-pinned call Jev gets two `noul` questions: should the **call**
+   calibrated to land a little above the counts the server reports.
+4. For every non-pinned call the model gets two `noul` questions: should the **call**
    stay (knowing it was made, with its input, still matters), and should the
    **result** stay verbatim (its contents are still needed and re-running the
    tool would not do).
 5. Questions are split into as many requests as needed so state plus questions
-   stays under `maxRequestTokens` (30k by default, under Jev's 32k request
-   limit). The same full state is resent with every request; requests run
+   stays under `maxRequestTokens` (13k by default; Ollama rejects bodies over
+   64 KiB, TypeSafe allows 32k tokens). The same full state is resent with every request; requests run
    concurrently and their answers are merged.
 6. Decisions per call, against `keepThreshold`:
    - `keepResult ≥ threshold` → keep call and result;
@@ -53,18 +59,18 @@ built-in compaction summary with the original messages.
    removed, untouched messages are returned as the same objects, and no result
    is ever left without its call.
 
-Jev failures, malformed answers, a missing key, or a history that cannot be
-fitted throw; the caller (or the Claude Code hook) decides what to fall back to.
+Request failures, malformed answers, or a history that cannot be fitted throw; the caller (or the Claude Code hook) decides what to fall back to.
 
 ## Install and usage
 
 ```sh
-npm install fast-jev-compaction
-export TYPESAFE_API_KEY=...
+npm install fast-clef-compaction
+# nothing else for a local Ollama with `ollama pull clef`
+# for TypeSafe: export SYSTEMONE_API_KEY=... and pass baseUrl + model
 ```
 
 ```ts
-import { compactMessages, reductionRatio, type Message } from 'fast-jev-compaction';
+import { compactMessages, reductionRatio, type Message } from 'fast-clef-compaction';
 
 const transcript: Message[] = [
   { role: 'user', text: 'Fix the failing test. Never edit src/generated.', toolUses: [] },
@@ -93,22 +99,22 @@ method) and call `compact(messages, asker, options)`; `buildJevRequest` and
 The building blocks (`collectToolCalls`, `fitState`, `batchCalls`,
 `decideCall`, `applyDecisions`) are exported too.
 
-`apiKey` defaults to `process.env.TYPESAFE_API_KEY`. Never commit the key or
+`apiKey` defaults to `process.env.SYSTEMONE_API_KEY` and is only sent when set. Never commit a key or
 put it in a source file.
 
 ## Options
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `apiKey` | `TYPESAFE_API_KEY` | TypeSafe API key (`compactMessages`/`JevClient`) |
-| `model` | `jev-latest` | Jev model name |
-| `baseUrl` | `https://api.typesafe.ai/v1/systemone` | System One endpoint |
+| `apiKey` | `SYSTEMONE_API_KEY` | Bearer token, sent only when set (`compactMessages`/`JevClient`) |
+| `model` | `clef` | Model name: `clef` or `clef-flash` on Ollama, `jev-latest` on TypeSafe |
+| `baseUrl` | `http://127.0.0.1:11434/v1/systemone` | System One endpoint (Ollama, llama-server, or `https://api.typesafe.ai/v1/systemone`) |
 | `fetch` | native `fetch` | Injectable fetch implementation for tests |
 | `goal` | last 3 user prompts | Ongoing task description included in the state |
 | `keepThreshold` | `0.5` | Minimum keep probability for a call or result to stay |
 | `preserveRecentMessages` | `6` | Newest messages never touched (the first is always kept) |
-| `maxStateTokens` | `25000` | Estimated token ceiling for the state |
-| `maxRequestTokens` | `30000` | Estimated ceiling for state plus one batch of questions |
+| `maxStateTokens` | `11000` | Estimated token ceiling for the state |
+| `maxRequestTokens` | `13000` | Estimated ceiling for state plus one batch of questions |
 | `truncateHeadChars` | `300` | Characters of a dropped tool result retained before its note |
 
 `result.stats` reports message and character counts before and after, the
@@ -127,7 +133,7 @@ stage was needed, and the number of requests.
 
 ## Claude Code plugin
 
-The repository root is a Claude Code function-hook plugin: `hooks/fast-jev.ts`
+The repository root is a Claude Code function-hook plugin: `hooks/fast-clef.ts`
 is a thin adapter that feeds `session.compact` transcripts through `src/` and
 falls back to Claude Code's built-in summary on errors or insufficient
 reduction. See [`hooks/README.md`](hooks/README.md) for configuration and the
@@ -139,30 +145,34 @@ Function hooks are an early-access Claude Code feature (2.1.274+), so the
 opt-in flag must be set wherever Claude Code runs, e.g. in `~/.claude/settings.json`:
 
 ```json
-{ "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1", "TYPESAFE_API_KEY": "<your key>" } }
+{ "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 ```
+
+Have Ollama 0.35.1 or newer running with the model pulled (`ollama pull clef`;
+`clef-flash` is faster but drops far more aggressively at the default
+threshold).
 
 Then add this repository as a plugin marketplace and install the plugin,
 either from the shell or as slash commands inside a session:
 
 ```sh
-claude plugin marketplace add tamaratran/fast-jev-compaction
-claude plugin install fast-jev-compaction@fast-jev-compaction
+claude plugin marketplace add vchaindz/fast-clef-compaction
+claude plugin install fast-clef-compaction@fast-clef-compaction
 ```
 
-The install prompts for the plugin options (API key, thresholds, `truncateHeadChars`,
-…); leave them at their defaults to use `TYPESAFE_API_KEY` from the environment.
+The install prompts for the plugin options (endpoint, model, thresholds,
+`truncateHeadChars`, …); the defaults target Ollama on `127.0.0.1:11434` with
+`clef` and no key.
 Restart Claude Code or run `/reload-plugins`. From then on `/compact` (and
-auto-compaction) goes through Jev: the toast reads
-`fast-jev-compaction: kept N/M messages, no summary (…)` when the pruned history
-replaced the built-in summary, or `fallback to built-in summary (…)` when Jev
+auto-compaction) goes through Clef: the toast reads
+`fast-clef-compaction: kept N/M messages, no summary (…)` when the pruned history
+replaced the built-in summary, or `fallback to built-in summary (…)` when the model
 could not remove enough (short sessions, or when it fails).
 
-To use a self-hosted decision model instead of TypeSafe, set the `baseUrl` option to
-its System One endpoint and `model` to the model it serves, for example
-`http://127.0.0.1:11434/v1/systemone` and `clef` for Ollama running Clef; `apiKey`
-still has to be a non-empty string. Ollama rejects requests over 64 KiB, so lower
-`maxStateTokens` and `maxRequestTokens` to about 11000 and 13000 there.
+To use TypeSafe's hosted Jev instead, set `baseUrl` to
+`https://api.typesafe.ai/v1/systemone`, `model` to `jev-latest`, the `apiKey`
+option (or `SYSTEMONE_API_KEY` / `TYPESAFE_API_KEY` in the environment), and raise
+`maxStateTokens` / `maxRequestTokens` to about 25000 / 30000.
 
 To run from a checkout without installing: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`
 from the repository root. No publishing step is required; the marketplace is
@@ -176,22 +186,8 @@ npm run typecheck        # library + hook
 npm test
 npm run build
 npm run validate:plugin  # claude plugin validate
-TYPESAFE_API_KEY="$(cat ~/.typesafe_key)" npm run demo
+npm run demo               # live check against the local Ollama
 ```
 
-The unit tests use a fake Jev and never contact TypeSafe. The demo is the live
+The unit tests use a fake server and never contact Ollama. The demo is the live
 network check.
-
-## Animated demo (macOS)
-
-`demo/JevDemo` is a small native SwiftUI app that plays a scripted, dramatized
-version of the compaction flow inside a Claude Code-style terminal: the tool
-calls of a canned transcript are scored, results and calls Jev lets go turn red
-and collapse away, and the rest stays verbatim. It never calls the API; it
-exists to be screen recorded.
-
-```sh
-demo/JevDemo/build.sh   # builds demo/JevDemo/build/JevDemo.app and launches it
-```
-
-Press space in the app to replay from the start.

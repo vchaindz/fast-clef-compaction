@@ -1,7 +1,10 @@
 import type { JevAnswer, JevQuestions, JevResponse, JevState } from './types.js';
 
-export const SYSTEM_ONE_URL = 'https://api.typesafe.ai/v1/systemone';
-export const DEFAULT_MODEL = 'jev-latest';
+/** Default endpoint: Ollama on this machine serving a Clef model. */
+export const SYSTEM_ONE_URL = 'http://127.0.0.1:11434/v1/systemone';
+/** TypeSafe's hosted System One endpoint, for the original Jev models. */
+export const TYPESAFE_URL = 'https://api.typesafe.ai/v1/systemone';
+export const DEFAULT_MODEL = 'clef';
 
 export interface JevRequest {
   url: string;
@@ -13,20 +16,21 @@ export interface JevRequest {
 /** The HTTP request for one Jev call, for any fetch-like transport. */
 export function buildJevRequest(
   params: {
-    apiKey: string;
+    /** Sent as a bearer token when set; a local Ollama needs none. */
+    apiKey?: string;
     model?: string;
     baseUrl?: string;
   },
   state: JevState,
   questions: JevQuestions,
 ): JevRequest {
+  const headers: Record<string, string> = {};
+  if (params.apiKey) headers.authorization = `Bearer ${params.apiKey}`;
+  headers['content-type'] = 'application/json';
   return {
     url: params.baseUrl ?? SYSTEM_ONE_URL,
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${params.apiKey}`,
-      'content-type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       model: params.model ?? DEFAULT_MODEL,
       state,

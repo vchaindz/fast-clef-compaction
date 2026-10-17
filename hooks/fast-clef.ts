@@ -25,6 +25,9 @@ const HOOK_DEFAULTS = {
   model: DEFAULT_MODEL,
 };
 
+/** Environment variables that can carry the API key, first match wins. */
+const API_KEY_ENV = ['SYSTEMONE_API_KEY', 'TYPESAFE_API_KEY'] as const;
+
 export type HookFetchInit = {
   method?: string;
   headers?: Record<string, string>;
@@ -42,7 +45,7 @@ export type HookFetch = (url: string, init?: HookFetchInit) => Promise<HookFetch
 
 export type HookConfig = CompactOptions & {
   apiKey?: string;
-  /** System One endpoint; unset means TypeSafe. */
+  /** System One endpoint; unset means Ollama on this machine. */
   baseUrl?: string;
   compactAtPercent: number;
   minReductionRatio: number;
@@ -94,7 +97,7 @@ export function resolveHookConfig(options: PluginOptions): HookConfig {
 /** A `JevAsker` over the engine's `$.http.fetch`. */
 export function jevAsker(
   fetchFn: HookFetch,
-  apiKey: string,
+  apiKey: string | undefined,
   model: string,
   baseUrl?: string,
 ): JevAsker {
@@ -170,13 +173,12 @@ export type SessionCompaction = {
   messages: SessionMessage[];
 };
 
-/** Runs the library over a session transcript; throws when the key is missing or Jev fails. */
+/** Runs the library over a session transcript; throws when the model request fails. */
 export async function compactSession(
   messages: readonly SessionMessage[],
   config: HookConfig,
   fetchFn: HookFetch,
 ): Promise<SessionCompaction> {
-  if (!config.apiKey) throw new Error('TYPESAFE_API_KEY is not configured');
   const result = await compact(
     messages,
     jevAsker(fetchFn, config.apiKey, config.model, config.baseUrl),
@@ -245,13 +247,15 @@ async function getApiKey(
   config: HookConfig,
 ): Promise<string | undefined> {
   if (config.apiKey) return config.apiKey;
-  const fromEnv = await $.env.get('TYPESAFE_API_KEY');
+  const fromEnv = (await $.env.get('SYSTEMONE_API_KEY')) || (await $.env.get('TYPESAFE_API_KEY'));
   if (fromEnv) return fromEnv;
   const settings = await $.settings.read();
   const env = settings['env'];
   if (env && typeof env === 'object') {
-    const value = (env as Record<string, unknown>)['TYPESAFE_API_KEY'];
-    if (typeof value === 'string' && value) return value;
+    for (const name of API_KEY_ENV) {
+      const value = (env as Record<string, unknown>)[name];
+      if (typeof value === 'string' && value) return value;
+    }
   }
   return undefined;
 }

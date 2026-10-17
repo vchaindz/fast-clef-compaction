@@ -1,13 +1,13 @@
 {
-  "name": "fast-jev-compaction",
-  "version": "0.3.0",
-  "description": "Verbatim Jev-guided compaction for Claude Code sessions.",
+  "name": "fast-clef-compaction",
+  "version": "1.0.0",
+  "description": "Verbatim Clef-guided compaction for Claude Code sessions, on a local Ollama or any System One server.",
   "license": "MIT",
   "userConfig": {
     "apiKey": {
       "type": "string",
-      "title": "TypeSafe API key",
-      "description": "TypeSafe API key. Leave unset to use TYPESAFE_API_KEY.",
+      "title": "System One API key",
+      "description": "Bearer token for the System One endpoint. Leave unset for a local Ollama; set it (or SYSTEMONE_API_KEY) for a hosted server such as TypeSafe.",
       "sensitive": true
     },
     "keepThreshold": {
@@ -37,14 +37,14 @@
     "maxStateTokens": {
       "type": "number",
       "title": "Maximum Jev state tokens",
-      "description": "Estimated token budget for the conversation state sent with every Jev request.",
-      "default": 25000
+      "description": "Estimated token budget for the conversation state sent with every Jev request. Ollama rejects requests over 64 KiB, so keep state plus questions under about 13000 tokens there.",
+      "default": 11000
     },
     "maxRequestTokens": {
       "type": "number",
       "title": "Maximum Jev request tokens",
       "description": "Estimated token budget for state plus questions in one Jev request.",
-      "default": 30000
+      "default": 13000
     },
     "truncateHeadChars": {
       "type": "number",
@@ -54,14 +54,15 @@
     },
     "model": {
       "type": "string",
-      "title": "Jev model",
-      "description": "TypeSafe Jev model name.",
-      "default": "jev-latest"
+      "title": "Decision model",
+      "description": "Model name sent to the endpoint: clef or clef-flash on Ollama, jev-latest on TypeSafe.",
+      "default": "clef"
     },
     "baseUrl": {
       "type": "string",
       "title": "System One endpoint",
-      "description": "URL of the /v1/systemone endpoint. Leave unset for TypeSafe. Point it at a local server for a self-hosted decision model, e.g. http://127.0.0.1:11434/v1/systemone for Ollama running clef."
+      "description": "URL of the /v1/systemone endpoint. Defaults to Ollama on this machine; set https://api.typesafe.ai/v1/systemone (plus apiKey) for TypeSafe.",
+      "default": "http://127.0.0.1:11434/v1/systemone"
     }
   }
 }

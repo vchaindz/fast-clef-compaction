@@ -294,10 +294,10 @@ describe('decisions', () => {
     expect(kept[0]).toBe(messages[0]);
     expect(kept[2]).not.toBe(messages[4]);
     expect(kept[2]?.toolUses[0]?.text).toMatch(
-      new RegExp(`^${'x'.repeat(300)}\\n\\[fast-jev-compaction truncated 1700 chars`),
+      new RegExp(`^${'x'.repeat(300)}\\n\\[fast-clef-compaction truncated 1700 chars`),
     );
     expect(kept[3]?.toolResults?.[0]?.text).toMatch(
-      new RegExp(`^${'x'.repeat(300)}\\n\\[fast-jev-compaction truncated 1700 chars`),
+      new RegExp(`^${'x'.repeat(300)}\\n\\[fast-clef-compaction truncated 1700 chars`),
     );
     expect(kept[2]).not.toBe(messages[4]);
     expect(kept[3]).not.toBe(messages[5]);
@@ -321,13 +321,13 @@ describe('decisions', () => {
 
     const kept = applyDecisions(messages, decisions, calls, 50);
     expect(kept[2]?.toolResults?.[0]?.text).toBe(
-      `${original.slice(0, 50)}\n[fast-jev-compaction truncated ${total - 50} chars of this tool result; re-run the tool if needed]`,
+      `${original.slice(0, 50)}\n[fast-clef-compaction truncated ${total - 50} chars of this tool result; re-run the tool if needed]`,
     );
     expect(kept[1]?.toolUses[0]?.text).toBe(kept[2]?.toolResults?.[0]?.text);
 
     const noHead = applyDecisions(messages, decisions, calls, 0);
     expect(noHead[2]?.toolResults?.[0]?.text).toBe(
-      `[fast-jev-compaction truncated ${total} chars of this tool result; re-run the tool if needed]`,
+      `[fast-clef-compaction truncated ${total} chars of this tool result; re-run the tool if needed]`,
     );
   });
 });
@@ -394,10 +394,10 @@ describe('HTTP client', () => {
     const request = buildJevRequest({ apiKey: 'k' }, { a: 1 }, {
       q: { type: 'noul', instructions: 'x' },
     });
-    expect(request.url).toBe('https://api.typesafe.ai/v1/systemone');
+    expect(request.url).toBe('http://127.0.0.1:11434/v1/systemone');
     expect(request.headers.authorization).toBe('Bearer k');
     expect(JSON.parse(request.body)).toEqual({
-      model: 'jev-latest',
+      model: 'clef',
       state: { a: 1 },
       questions: { q: { type: 'noul', instructions: 'x' } },
     });
@@ -424,10 +424,20 @@ describe('HTTP client', () => {
     expect(response.answers.q).toEqual({ noul: 0.4 });
     expect(JSON.parse(bodies[0]!).model).toBe('jev-test');
 
-    const keyless = new JevClient({ apiKey: '' });
-    await expect(keyless.ask('s', {})).rejects.toThrow(/TYPESAFE_API_KEY/);
-    await expect(
-      compactMessages(transcript(), { apiKey: '', preserveRecentMessages: 1 }),
-    ).rejects.toThrow(/TYPESAFE_API_KEY/);
+    const keylessHeaders: Array<Record<string, string> | undefined> = [];
+    const keyless = new JevClient({
+      apiKey: '',
+      fetch: (async (_url: string, init?: RequestInit) => {
+        keylessHeaders.push(init?.headers as Record<string, string> | undefined);
+        return new Response(JSON.stringify({ answers: { q: { noul: 0.4 } } }), { status: 200 });
+      }) as typeof fetch,
+    });
+    await keyless.ask('s', { q: { type: 'noul', instructions: 'x' } });
+    expect(keylessHeaders[0]).toEqual({ 'content-type': 'application/json' });
+  });
+
+  it('omits the authorization header when no key is given', () => {
+    const request = buildJevRequest({}, { a: 1 }, { q: { type: 'noul', instructions: 'x' } });
+    expect(request.headers).toEqual({ 'content-type': 'application/json' });
   });
 });

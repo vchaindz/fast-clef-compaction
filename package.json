@@ -1,7 +1,7 @@
 {
-  "name": "fast-jev-compaction",
-  "version": "0.2.0",
-  "description": "Continuous, verbatim context compaction for LLM agents using TypeSafe's Jev model.",
+  "name": "fast-clef-compaction",
+  "version": "1.0.0",
+  "description": "Continuous, verbatim context compaction for LLM agents, judged by a Clef decision model on local Ollama or any System One server.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -31,5 +31,10 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vchaindz/fast-clef-compaction.git"
+  },
+  "homepage": "https://github.com/vchaindz/fast-clef-compaction"
 }

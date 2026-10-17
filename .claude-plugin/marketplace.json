@@ -1,15 +1,15 @@
 {
-  "name": "fast-jev-compaction",
+  "name": "fast-clef-compaction",
   "owner": {
-    "name": "tamaratran",
-    "url": "https://github.com/tamaratran"
+    "name": "vchaindz",
+    "url": "https://github.com/vchaindz"
   },
   "plugins": [
     {
-      "name": "fast-jev-compaction",
+      "name": "fast-clef-compaction",
       "source": "./",
-      "description": "Verbatim Jev-guided compaction for Claude Code sessions.",
-      "version": "0.3.0",
+      "description": "Verbatim Clef-guided compaction for Claude Code sessions, on a local Ollama or any System One server.",
+      "version": "1.0.0",
       "license": "MIT"
     }
   ]

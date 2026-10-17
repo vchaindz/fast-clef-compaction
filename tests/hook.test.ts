@@ -6,7 +6,7 @@ import {
   resolveHookConfig,
   summarize,
   toSessionMessages,
-} from '../hooks/fast-jev.ts';
+} from '../hooks/fast-clef.ts';
 import { applyDecisions, collectToolCalls, decideCall, type Message } from '../src/index.js';
 
 type SessionMessage = Message & { handle?: string };
@@ -54,7 +54,7 @@ function jevFetch(answer: (name: string) => number, bodies: string[] = [], urls:
 
 describe('hook config', () => {
   it('reads userConfig values and falls back to defaults', () => {
-    expect(resolveHookConfig({})).toEqual({ compactAtPercent: 60, minReductionRatio: 0.25, model: 'jev-latest' });
+    expect(resolveHookConfig({})).toEqual({ compactAtPercent: 60, minReductionRatio: 0.25, model: 'clef' });
     expect(
       resolveHookConfig({ apiKey: 'k', keepThreshold: 0.3, maxStateTokens: 1000, model: 'jev-x', goal: 'g', compactAtPercent: 'no' }),
     ).toEqual({
@@ -92,11 +92,11 @@ describe('session message mapping', () => {
     expect(out[0]).toBe(messages[0]);
     expect(out[1]?.handle).toBeUndefined();
     expect(out[1]?.toolUses[0]?.text).toMatch(
-      new RegExp(`^${'x'.repeat(300)}\\n\\[fast-jev-compaction truncated 1700 chars`),
+      new RegExp(`^${'x'.repeat(300)}\\n\\[fast-clef-compaction truncated 1700 chars`),
     );
     expect(out[2]?.handle).toBeUndefined();
     expect(out[2]?.toolResults?.[0]?.text).toMatch(
-      new RegExp(`^${'x'.repeat(300)}\\n\\[fast-jev-compaction truncated 1700 chars`),
+      new RegExp(`^${'x'.repeat(300)}\\n\\[fast-clef-compaction truncated 1700 chars`),
     );
     expect(out[2]?.toolResults?.[0]).toMatchObject({ tool_use_id: 'tool-1', isError: false });
     expect(out[3]).toBe(messages[3]);
@@ -136,16 +136,29 @@ describe('compactSession', () => {
     expect(decisionLogLines(output)).toEqual([`decisions: ${decisionLog(output)}`]);
   });
 
-  it('sends requests to baseUrl when configured and to System One otherwise', async () => {
+  it('sends requests to the local Ollama endpoint by default and to baseUrl when configured', async () => {
     const urls: string[] = [];
-    const base = { ...resolveHookConfig({ preserveRecentMessages: 1 }), apiKey: 'k' };
+    const base = resolveHookConfig({ preserveRecentMessages: 1 });
     await compactSession(transcript(), base, jevFetch(() => 0.1, [], urls));
     await compactSession(
       transcript(),
-      { ...base, baseUrl: 'http://127.0.0.1:11434/v1/systemone' },
+      { ...base, baseUrl: 'https://api.typesafe.ai/v1/systemone', apiKey: 'k' },
       jevFetch(() => 0.1, [], urls),
     );
-    expect(urls).toEqual(['https://api.typesafe.ai/v1/systemone', 'http://127.0.0.1:11434/v1/systemone']);
+    expect(urls).toEqual(['http://127.0.0.1:11434/v1/systemone', 'https://api.typesafe.ai/v1/systemone']);
+  });
+
+  it('sends no authorization header without a key and a bearer header with one', async () => {
+    const headers: Array<Record<string, string> | undefined> = [];
+    const spyFetch = (answer: () => number) => async (url: string, init?: { body?: string; headers?: Record<string, string> }) => {
+      headers.push(init?.headers);
+      return jevFetch(answer)(url, init);
+    };
+    const base = resolveHookConfig({ preserveRecentMessages: 1 });
+    await compactSession(transcript(), base, spyFetch(() => 0.1));
+    await compactSession(transcript(), { ...base, apiKey: 'k' }, spyFetch(() => 0.1));
+    expect(headers[0]).toEqual({ 'content-type': 'application/json' });
+    expect(headers[1]).toEqual({ authorization: 'Bearer k', 'content-type': 'application/json' });
   });
 
   it('splits a long decision log into ui.log lines under the host limit', async () => {
@@ -160,9 +173,8 @@ describe('compactSession', () => {
     expect(decisionLogLines({ ...output, decisions: [] })).toEqual(['decisions: (none)']);
   });
 
-  it('throws on a missing key and on failed requests so the hook falls back', async () => {
+  it('throws on failed requests so the hook falls back', async () => {
     const config = resolveHookConfig({ preserveRecentMessages: 1 });
-    await expect(compactSession(transcript(), config, jevFetch(() => 0))).rejects.toThrow(/TYPESAFE_API_KEY/);
     await expect(
       compactSession(transcript(), { ...config, apiKey: 'k' }, async () => ({ status: 500, ok: false, text: 'x' })),
     ).rejects.toThrow(/500/);
